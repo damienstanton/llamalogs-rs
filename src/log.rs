@@ -16,7 +16,7 @@ pub struct Log {
 }
 
 impl Log {
-    async fn to_aggregate(&self) -> AggregatedLog {
+    fn to_aggregate(&self) -> AggregatedLog {
         let mut al = AggregatedLog::default();
         al.sender = self.sender.clone();
         al.receiver = self.receiver.clone();
@@ -49,7 +49,7 @@ pub(crate) enum JSONFailure {
 }
 
 impl AggregatedLog {
-    async fn to_json(&self) -> Result<String, JSONFailure> {
+    fn to_json(&self) -> Result<String, JSONFailure> {
         match to_json_string(self) {
             Ok(s) => Ok(s),
             Err(_) => Err(JSONFailure::ConversionError),

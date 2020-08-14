@@ -19,7 +19,7 @@ pub struct LogArgs {
 }
 
 impl LogArgs {
-    pub async fn to_log(&self) -> Log {
+    pub fn to_log(&self) -> Log {
         let mut l = Log::default();
         l.sender = self.sender.clone();
         l.receiver = self.receiver.clone();

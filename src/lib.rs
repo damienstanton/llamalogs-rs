@@ -7,12 +7,13 @@ mod aggregator;
 mod args;
 mod llama;
 mod log;
+mod proxy;
 mod state;
 mod statistics;
 
 // Define the public API here
+pub use aggregator::start_timer;
 pub use args::{InitArgs, LogArgs, StatArgs};
 pub use llama::{force_send, init, log};
 pub use log::Log;
-pub use state::Global;
 pub use statistics::Stat;

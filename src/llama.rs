@@ -1,32 +1,29 @@
-use crate::{
-    args::{InitArgs, LogArgs},
-    state::GlobalState,
-};
+use crate::args::{InitArgs, LogArgs};
 
 /// Sets the accountKey and graphName to be used as defaults for all future
 /// calls. Also starts the timer to automatically send data into the Llama Logs
 /// server on a recurring basis.
-pub fn init(args: InitArgs, state: &mut GlobalState) {
-    let mut local = state.lock().unwrap(); // TODO: handle this null case
-    local.graph_name = args.graph_name;
-    local.account_key = args.account_key;
-    local.is_dev_env = args.is_dev_env;
-    local.is_disabled = args.is_disabled;
-    if !local.is_disabled {
-        // TODO: start_timer
-    }
+pub fn init(args: InitArgs) {
+    // let mut local = state.lock().unwrap(); // TODO: handle this null case
+    // local.graph_name = args.graph_name;
+    // local.account_key = args.account_key;
+    // local.is_dev_env = args.is_dev_env;
+    // local.is_disabled = args.is_disabled;
+    // if !local.is_disabled {
+    //     // TODO: start_timer
+    // }
 }
 
 /// Logs an event that will be sent to the visual Llama Log graph on the
 /// website. Logs are aggregated client side and then sent in as a batch to the
 /// server on a repeating interval.
-pub async fn log(args: LogArgs, state: &mut GlobalState) {
-    let local = state.lock().unwrap(); // TODO: handle this null case
-    if local.is_disabled {
-        return;
-    }
-    let log = args.to_log().await;
-    // TODO: process_log
+pub fn log(args: LogArgs) {
+    // let local = state.lock().unwrap(); // TODO: handle this null case
+    // if local.is_disabled {
+    //     return;
+    // }
+    // let log = args.to_log().await;
+    // // TODO: process_log
 }
 
 /// A synchronous method to make an https request to send the aggregated logs
