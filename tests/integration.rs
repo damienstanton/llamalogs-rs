@@ -1,5 +1,3 @@
-use llamalogs::{force_send, init, log};
-
 #[test]
 fn basic_init() {}
 
