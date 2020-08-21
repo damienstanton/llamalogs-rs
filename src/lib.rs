@@ -4,6 +4,7 @@
 //! interactive graph. It was created to help bring clarity to complex cloud
 //! architectures
 use async_std::io::Error;
+use std::collections::HashMap;
 
 struct Llama {
     is_dev_env: bool,
@@ -17,10 +18,10 @@ enum LogType {
     Return,
 }
 
-struct Log {
+struct Log<'a> {
     log_type: LogType,
-    sender: &'static str,
-    receiver: &'static str,
+    sender: HashMap<&'static str, &'a Log<'a>>,
+    receiver: HashMap<&'static str, &'a Log<'a>>,
     timestamp: i64,
     message: &'static str,
     initial_message: bool,
@@ -44,14 +45,14 @@ struct Stat {
     count: Option<i64>,
 }
 
-struct Aggregator {
+struct Aggregator<'a> {
     timeout_clear: Option<bool>,
     last_send_time: i64,
-    aggregate_logs: Box<Vec<Log>>,
+    aggregate_logs: Box<Vec<Log<'a>>>,
     aggregate_stats: Box<Vec<Stat>>,
 }
 
-impl Aggregator {
+impl<'a> Aggregator<'a> {
     fn start_sending(&mut self, global: &Llama) {
         self.set_new_timeout(global);
     }
@@ -98,7 +99,10 @@ impl Aggregator {
         self.last_send_time = 0 // chrono this to utc now
     }
 
-    async fn collect_messages(&self, global: &Llama) -> Result<(Vec<Log>, Vec<Stat>), Error> {
+    async fn collect_messages(
+        &'a self,
+        global: &Llama,
+    ) -> Result<(Vec<Log<'a>>, Vec<Stat>), Error> {
         if global.is_dev_env {
             println!("sending messages");
         }
