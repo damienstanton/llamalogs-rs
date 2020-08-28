@@ -1,6 +1,15 @@
 use chrono::Utc;
 use serde::Serialize;
-use std::{collections::HashMap, sync::*}; // TODO: settle on a threadsafe container
+use std::{collections::HashMap, sync::RwLock}; // TODO: settle on a threadsafe container
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum LlamaError {
+    #[error("Network failure when communicating with llamalogs server")]
+    NetError(),
+    #[error("Unknown error")]
+    Unknown,
+}
 
 #[derive(Debug)]
 pub struct LogArgs {
@@ -106,11 +115,11 @@ pub struct Stat {
     pub(crate) count: i64,
 }
 
-pub type GlobalState = State;
+pub type GlobalState = RwLock<State>;
 pub(crate) type LogData = HashMap<&'static str, HashMap<&'static str, AggregateLog>>;
 pub(crate) type StatData = HashMap<&'static str, HashMap<&'static str, Stat>>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct State {
     pub(crate) is_dev_env: bool,
     pub(crate) is_disabled: bool,

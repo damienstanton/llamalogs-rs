@@ -2,13 +2,20 @@ use crate::types::*;
 use futures::executor::block_on;
 use surf::Exception;
 
-pub(crate) fn collect_and_send_blocking(global: GlobalState) -> Result<(), Exception> {
-    block_on(collect_and_send(global))?;
-    Ok(())
+pub(crate) fn collect_and_send_blocking(global: &GlobalState) -> Result<(), LlamaError> {
+    match block_on(collect_and_send(global)) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            eprintln!("Log submission error: {:#?}", e.to_string());
+            Err(LlamaError::NetError())
+        }
+    }
 }
 
-pub(crate) async fn collect_and_send(global: GlobalState) -> Result<(), Exception> {
+pub(crate) async fn collect_and_send(global: &GlobalState) -> Result<(), Exception> {
     let log_list = global
+        .read()
+        .unwrap()
         .aggregated_logs
         .iter()
         .flat_map(|log| log.1.values())
@@ -16,16 +23,20 @@ pub(crate) async fn collect_and_send(global: GlobalState) -> Result<(), Exceptio
         .collect::<Vec<AggregateLog>>();
 
     let stat_list = global
+        .read()
+        .unwrap()
         .aggregated_stats
         .iter()
         .flat_map(|log| log.1.values())
         .map(|ag| *ag)
         .collect::<Vec<Stat>>();
 
-    if global.is_dev_env {
-        println!("Log list: {:#?}", global.aggregated_logs);
+    if global.read().unwrap().is_dev_env {
+        println!("Log list: {:#?}", global.read().unwrap().aggregated_logs);
     }
-    if global.aggregated_logs.is_empty() && global.aggregated_stats.is_empty() {
+    if global.read().unwrap().aggregated_logs.is_empty()
+        && global.read().unwrap().aggregated_stats.is_empty()
+    {
         ()
     }
 
@@ -39,7 +50,7 @@ pub(crate) async fn collect_and_send(global: GlobalState) -> Result<(), Exceptio
     new_req.time_logs = log_list;
     new_req.time_stats = stat_list;
 
-    let url = match global.is_dev_env {
+    let url = match global.read().unwrap().is_dev_env {
         true => "http://localhost:4000/",
         false => "https://llamalogs.com/api/v0/timedata",
     };

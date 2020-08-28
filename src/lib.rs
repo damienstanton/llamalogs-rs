@@ -8,17 +8,16 @@ mod aggregator;
 mod proxy;
 mod types;
 
-use aggregator::{add_log, add_stat, add_stat_avg, add_stat_max, start_timer};
-use proxy::{collect_and_send, collect_and_send_blocking};
-use surf::Exception;
-use types::{GlobalState, Log, LogArgs, Stat, StatArgs};
+use aggregator::{add_log, add_stat, start_timer};
+use proxy::collect_and_send_blocking;
+use types::{GlobalState, LlamaError, Log, LogArgs, Stat, StatArgs};
 
 fn process_log(global: GlobalState, mut log: Log) {
     if log.account == "" {
-        log.account = global.account_key;
+        log.account = global.read().unwrap().account_key;
     }
     if log.graph == "" {
-        log.graph = global.graph_name;
+        log.graph = global.read().unwrap().graph_name;
     }
     if log.sender == "" || log.receiver == "" || log.account == "" || log.graph == "" {
         return;
@@ -28,10 +27,10 @@ fn process_log(global: GlobalState, mut log: Log) {
 
 fn process_stat(global: GlobalState, mut stat: Stat) {
     if stat.account == "" {
-        stat.account = global.account_key;
+        stat.account = global.read().unwrap().account_key;
     }
     if stat.graph == "" {
-        stat.graph == global.graph_name;
+        stat.graph = global.read().unwrap().graph_name;
     }
     add_stat(global, stat);
 }
@@ -46,18 +45,22 @@ pub struct InitArgs {
 }
 
 /// Creates the global state object used throughout the crate.
-pub fn init(args: InitArgs) -> GlobalState {
-    let mut g = GlobalState::default();
-    g.account_key = args.account_key;
-    g.graph_name = args.graph_name;
-    g.is_dev_env = args.is_dev_env;
-    g.is_disabled = args.is_disabled;
+pub async fn init(args: InitArgs) -> GlobalState {
+    let g = GlobalState::default();
+    g.write().unwrap().account_key = args.account_key;
+    g.write().unwrap().graph_name = args.graph_name;
+    g.write().unwrap().is_dev_env = args.is_dev_env;
+    g.write().unwrap().is_disabled = args.is_disabled;
+
+    if !args.is_disabled {
+        start_timer(&g).await;
+    }
     g
 }
 
 /// Creates a new log for processing
 pub fn log(global: GlobalState, args: LogArgs) {
-    if global.is_disabled {
+    if global.read().unwrap().is_disabled {
         return;
     }
     let log = args.to_log();
@@ -66,7 +69,7 @@ pub fn log(global: GlobalState, args: LogArgs) {
 
 /// Creates a new point stat for processing
 pub fn point_stat(global: GlobalState, args: StatArgs) {
-    if global.is_disabled {
+    if global.read().unwrap().is_disabled {
         return;
     }
     let mut stat = args.to_stat();
@@ -76,7 +79,7 @@ pub fn point_stat(global: GlobalState, args: StatArgs) {
 
 /// Creates a new average stat for processing
 pub fn average_stat(global: GlobalState, args: StatArgs) {
-    if global.is_disabled {
+    if global.read().unwrap().is_disabled {
         return;
     }
     let mut stat = args.to_stat();
@@ -86,7 +89,7 @@ pub fn average_stat(global: GlobalState, args: StatArgs) {
 
 /// Creates a new max stat for processing
 pub fn max_stat(global: GlobalState, args: StatArgs) {
-    if global.is_disabled {
+    if global.read().unwrap().is_disabled {
         return;
     }
     let mut stat = args.to_stat();
@@ -95,10 +98,12 @@ pub fn max_stat(global: GlobalState, args: StatArgs) {
 }
 
 /// Calls a blocking send of the current collection of logs and stats
-pub fn force_send(global: GlobalState) -> Result<(), Exception> {
-    if global.is_disabled {
+pub fn force_send(global: GlobalState) -> Result<(), LlamaError> {
+    if global.read().unwrap().is_disabled {
         ()
     }
-    collect_and_send_blocking(global);
-    Ok(())
+    match collect_and_send_blocking(&global) {
+        Ok(_) => Ok(()),
+        Err(_) => Err(LlamaError::NetError()),
+    }
 }
