@@ -1,6 +1,6 @@
 use chrono::Utc;
 use serde::Serialize;
-use std::{collections::HashMap, sync::RwLock}; // TODO: settle on a threadsafe container
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -11,14 +11,14 @@ pub enum LlamaError {
     Unknown,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LogArgs {
-    sender: &'static str,
-    receiver: &'static str,
-    message: &'static str,
-    is_error: bool,
-    account_key: &'static str,
-    graph_name: &'static str,
+    pub sender: &'static str,
+    pub receiver: &'static str,
+    pub message: &'static str,
+    pub is_error: bool,
+    pub account_key: &'static str,
+    pub graph_name: &'static str,
 }
 
 impl LogArgs {
@@ -77,30 +77,36 @@ pub struct Log {
 impl Log {
     pub(crate) fn to_aggregate_log(self) -> AggregateLog {
         AggregateLog {
-            log: self,
-            account_key: "",
-            graph_name: "",
-            start_time: 0i64,
+            // log: self,
+            account_key: self.account,
+            graph_name: self.graph,
+            start_time: self.timestamp,
             initial_message_count: 0i64,
             error_message: "",
             count: 0i64,
             errors: 0i64,
+            message: self.message,
+            sender: self.sender,
+            receiver: self.receiver,
         }
     }
 }
 
 #[derive(Debug, Copy, Clone, Serialize)]
-pub(crate) struct AggregateLog {
-    pub(crate) log: Log,
-    pub(crate) account_key: &'static str,
-    pub(crate) graph_name: &'static str,
-    pub(crate) start_time: i64,
+pub struct AggregateLog {
+    // pub log: Log,
+    pub account_key: &'static str,
+    pub graph_name: &'static str,
+    pub start_time: i64,
     #[serde(rename(serialize = "initialMessageCount"))]
-    pub(crate) initial_message_count: i64,
+    pub initial_message_count: i64,
     #[serde(rename(serialize = "errorMessage"))]
-    pub(crate) error_message: &'static str,
-    pub(crate) count: i64,
-    pub(crate) errors: i64,
+    pub error_message: &'static str,
+    pub count: i64,
+    pub errors: i64,
+    pub message: &'static str,
+    pub sender: &'static str,
+    pub receiver: &'static str,
 }
 
 #[derive(Debug, Copy, Clone, Serialize)]
@@ -115,19 +121,19 @@ pub struct Stat {
     pub(crate) count: i64,
 }
 
-pub type GlobalState = RwLock<State>;
-pub(crate) type LogData = HashMap<&'static str, HashMap<&'static str, AggregateLog>>;
-pub(crate) type StatData = HashMap<&'static str, HashMap<&'static str, Stat>>;
+pub type GlobalState = State;
+pub type LogData = HashMap<&'static str, HashMap<&'static str, AggregateLog>>;
+pub type StatData = HashMap<&'static str, HashMap<&'static str, Stat>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct State {
-    pub(crate) is_dev_env: bool,
-    pub(crate) is_disabled: bool,
-    pub(crate) account_key: &'static str,
-    pub(crate) graph_name: &'static str,
-    pub(crate) aggregated_logs: LogData,
-    pub(crate) aggregated_stats: StatData,
-    pub(crate) timer_started: bool,
+    pub is_dev_env: bool,
+    pub is_disabled: bool,
+    pub account_key: &'static str,
+    pub graph_name: &'static str,
+    pub aggregated_logs: LogData,
+    pub aggregated_stats: StatData,
+    pub timer_started: bool,
 }
 
 #[derive(Default, Debug, Serialize)]

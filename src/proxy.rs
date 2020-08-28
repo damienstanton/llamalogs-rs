@@ -1,9 +1,10 @@
 use crate::types::*;
 use futures::executor::block_on;
+use serde_json::to_string;
 use surf::Exception;
 
-pub(crate) fn collect_and_send_blocking(global: &GlobalState) -> Result<(), LlamaError> {
-    match block_on(collect_and_send(global)) {
+pub(crate) fn send_blocking(global: &GlobalState) -> Result<(), LlamaError> {
+    match block_on(send(global)) {
         Ok(_) => Ok(()),
         Err(e) => {
             eprintln!("Log submission error: {:#?}", e.to_string());
@@ -12,31 +13,30 @@ pub(crate) fn collect_and_send_blocking(global: &GlobalState) -> Result<(), Llam
     }
 }
 
-pub(crate) async fn collect_and_send(global: &GlobalState) -> Result<(), Exception> {
-    let log_list = global
-        .read()
-        .unwrap()
-        .aggregated_logs
-        .iter()
-        .flat_map(|log| log.1.values())
-        .map(|ag| *ag)
-        .collect::<Vec<AggregateLog>>();
+pub fn collect_messages(global: &GlobalState) -> (Vec<AggregateLog>, Vec<Stat>) {
+    let mut log_list = Vec::new();
+    let mut stat_list = Vec::new();
 
-    let stat_list = global
-        .read()
-        .unwrap()
-        .aggregated_stats
-        .iter()
-        .flat_map(|log| log.1.values())
-        .map(|ag| *ag)
-        .collect::<Vec<Stat>>();
-
-    if global.read().unwrap().is_dev_env {
-        println!("Log list: {:#?}", global.read().unwrap().aggregated_logs);
+    for (_, k) in &global.aggregated_logs {
+        for (_, v) in k {
+            log_list.push(*v);
+        }
     }
-    if global.read().unwrap().aggregated_logs.is_empty()
-        && global.read().unwrap().aggregated_stats.is_empty()
-    {
+    for (_, k) in &global.aggregated_stats {
+        for (_, v) in k {
+            stat_list.push(*v);
+        }
+    }
+
+    (log_list, stat_list)
+}
+
+pub(crate) async fn send(global: &GlobalState) -> Result<(), Exception> {
+    let (log_list, stat_list) = collect_messages(global);
+    if global.is_dev_env {
+        println!("Log list: {:#?}", global.aggregated_logs);
+    }
+    if global.aggregated_logs.is_empty() && global.aggregated_stats.is_empty() {
         ()
     }
 
@@ -47,17 +47,23 @@ pub(crate) async fn collect_and_send(global: &GlobalState) -> Result<(), Excepti
     if !stat_list.is_empty() {
         new_req.account_key = stat_list[0].account
     }
+
     new_req.time_logs = log_list;
     new_req.time_stats = stat_list;
+    let new_req_json = to_string(&new_req).unwrap();
+    println!("JSON request: {:#?}", new_req_json);
 
-    let url = match global.read().unwrap().is_dev_env {
+    let url = match global.is_dev_env {
         true => "http://localhost:4000/",
         false => "https://llamalogs.com/api/v0/timedata",
     };
-    let res = surf::post(url).body_json(&new_req)?.await?;
+    let mut res = surf::post(url)
+        .set_header("Content-Type", "application/json")
+        .body_string(new_req_json)
+        .await?;
     if !res.status().is_success() {
         eprintln!("Bad status code: {:#?}", res.status());
     }
-
+    println!("Response: {:#?}", res.body_json::<String>().await);
     Ok(())
 }

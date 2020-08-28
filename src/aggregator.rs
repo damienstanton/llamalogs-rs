@@ -1,21 +1,17 @@
 use crate::proxy::*;
 use crate::types::*;
-use std::{
-    collections::HashMap,
-    sync::{mpsc::channel, RwLock},
-    thread,
-};
+use std::{collections::HashMap, sync::mpsc::channel, thread};
 
-pub(crate) async fn start_timer(global: &GlobalState) {
-    if global.read().unwrap().timer_started {
+pub(crate) fn start_timer(global: &mut GlobalState) {
+    if global.timer_started {
         return;
     }
-    global.write().unwrap().timer_started = true;
-    let fs_global = global.read().unwrap().clone();
+    global.timer_started = true;
+    let fs_global = global.clone();
 
     thread::spawn(move || {
         thread::sleep(std::time::Duration::from_secs(5));
-        let res = collect_and_send_blocking(&RwLock::new(fs_global));
+        let res = send_blocking(&fs_global);
         match res {
             Ok(_) => (),
             Err(e) => {
@@ -31,7 +27,7 @@ pub(crate) async fn start_timer(global: &GlobalState) {
         let _ = tx.send(true);
     });
     while let Some(_) = rx.recv().iter().next() {
-        match collect_and_send(&global).await {
+        match send_blocking(&global) {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("Timer submission error: {:#?}", e.to_string());
@@ -41,7 +37,7 @@ pub(crate) async fn start_timer(global: &GlobalState) {
     }
 }
 
-pub(crate) fn add_stat(global: GlobalState, stat: Stat) {
+pub(crate) fn add_stat(global: &mut GlobalState, stat: Stat) {
     match stat.kind {
         "point" => {}
         "average" => add_stat_avg(global, stat),
@@ -50,25 +46,13 @@ pub(crate) fn add_stat(global: GlobalState, stat: Stat) {
     };
 }
 
-pub(crate) fn add_stat_avg(global: GlobalState, mut stat: Stat) {
+pub(crate) fn add_stat_avg(global: &mut GlobalState, mut stat: Stat) {
     let component = stat.component;
     let name = stat.name;
-    if global
-        .read()
-        .unwrap()
-        .aggregated_stats
-        .get(component)
-        .is_none()
-    {
-        global
-            .write()
-            .unwrap()
-            .aggregated_stats
-            .insert(component, HashMap::new());
+    if global.aggregated_stats.get(component).is_none() {
+        global.aggregated_stats.insert(component, HashMap::new());
     }
     if global
-        .read()
-        .unwrap()
         .aggregated_stats
         .get(component)
         .unwrap()
@@ -77,17 +61,11 @@ pub(crate) fn add_stat_avg(global: GlobalState, mut stat: Stat) {
     {
         let mut new_named_stat = HashMap::new();
         new_named_stat.insert(component, stat);
-        global
-            .write()
-            .unwrap()
-            .aggregated_stats
-            .insert(name, new_named_stat);
+        global.aggregated_stats.insert(name, new_named_stat);
         stat.count = 0;
     }
 
     let mut existing = *global
-        .read()
-        .unwrap()
         .aggregated_stats
         .get(component)
         .unwrap()
@@ -98,25 +76,13 @@ pub(crate) fn add_stat_avg(global: GlobalState, mut stat: Stat) {
     existing.count += 1;
 }
 
-pub(crate) fn add_stat_max(global: GlobalState, stat: Stat) {
+pub(crate) fn add_stat_max(global: &mut GlobalState, stat: Stat) {
     let component = stat.component;
     let name = stat.name;
-    if global
-        .read()
-        .unwrap()
-        .aggregated_stats
-        .get(component)
-        .is_none()
-    {
-        global
-            .write()
-            .unwrap()
-            .aggregated_stats
-            .insert(component, HashMap::new());
+    if global.aggregated_stats.get(component).is_none() {
+        global.aggregated_stats.insert(component, HashMap::new());
     }
     if global
-        .read()
-        .unwrap()
         .aggregated_stats
         .get(component)
         .unwrap()
@@ -125,16 +91,10 @@ pub(crate) fn add_stat_max(global: GlobalState, stat: Stat) {
     {
         let mut new_named_stat = HashMap::new();
         new_named_stat.insert(component, stat);
-        global
-            .write()
-            .unwrap()
-            .aggregated_stats
-            .insert(name, new_named_stat);
+        global.aggregated_stats.insert(name, new_named_stat);
     }
 
     let mut existing = *global
-        .read()
-        .unwrap()
         .aggregated_stats
         .get(component)
         .unwrap()
@@ -146,33 +106,22 @@ pub(crate) fn add_stat_max(global: GlobalState, stat: Stat) {
     }
 }
 
-pub(crate) fn add_log(global: GlobalState, log: Log) {
+pub(crate) fn add_log(global: &mut GlobalState, log: Log) {
     let sender = log.sender;
     let receiver = log.receiver;
 
-    if !global.read().unwrap().aggregated_logs.contains_key(sender) {
-        global
-            .write()
-            .unwrap()
-            .aggregated_logs
-            .insert(sender, HashMap::new());
+    if !global.aggregated_logs.contains_key(sender) {
+        global.aggregated_logs.insert(sender, HashMap::new());
     }
-    let rlock = global.read().unwrap();
-    let txmap = rlock.aggregated_logs.get(sender).unwrap();
+    let txmap = global.aggregated_logs.get(sender).unwrap();
     if txmap.get(receiver).is_none() {
         let agg = log.to_aggregate_log();
         let mut new_rxmap = HashMap::new();
         new_rxmap.insert(receiver, agg);
-        global
-            .write()
-            .unwrap()
-            .aggregated_logs
-            .insert(sender, new_rxmap);
+        global.aggregated_logs.insert(sender, new_rxmap);
     }
 
     let mut existing = *global
-        .read()
-        .unwrap()
         .aggregated_logs
         .get(sender)
         .unwrap()
@@ -183,14 +132,14 @@ pub(crate) fn add_log(global: GlobalState, log: Log) {
     }
 
     existing.count += 1;
-    if existing.log.message == "" && !log.is_error {
-        existing.log.message = log.message;
+    if existing.message == "" && !log.is_error {
+        existing.message = log.message;
     }
     if existing.error_message == "" && log.is_error {
         existing.error_message = log.message;
     }
 
-    if global.read().unwrap().is_dev_env {
-        println!("{:#?}", global.read().unwrap().aggregated_logs);
+    if global.is_dev_env {
+        println!("Aggregated logs: {:#?}", global.aggregated_logs);
     }
 }
