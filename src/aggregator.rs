@@ -1,183 +1,128 @@
-use crate::{
-    state::{GlobalState, Payload},
-    types::{Log, Stat},
-};
-use chrono::Utc;
-use std::{collections::HashMap, sync::Arc};
-use surf::Exception;
-pub(crate) struct Aggregator {
-    pub(crate) timeout_clear: Option<bool>,
-    pub(crate) last_send_time: i64,
+use crate::types::*;
+use std::collections::HashMap;
+
+pub(crate) fn start_timer(mut global: GlobalState) {
+    if global.timer_started {
+        return;
+    }
+
+    // TODO: sleep for 5 seconds then send_messages on background thread
+    // TODO: set up ticker for 59_500 millis, send_messages every tick
+
+    global.timer_started = true;
 }
 
-impl Aggregator {
-    pub(crate) fn start_sending(&mut self, global: &GlobalState) {
-        self.set_new_timeout(global);
+pub(crate) fn get_and_clear_logs(mut global: GlobalState) -> (LogData, StatData) {
+    let current_logs = global.aggregated_logs;
+    let current_stats = global.aggregated_stats;
+    global.aggregated_logs = HashMap::new();
+    global.aggregated_stats = HashMap::new();
+    (current_logs, current_stats)
+}
+
+pub(crate) fn add_stat(mut global: GlobalState, stat: Stat) {
+    match stat.kind {
+        "point" => {}
+        "average" => add_stat_avg(global, stat),
+        "max" => add_stat_max(global, stat),
+        _ => return,
+    };
+}
+
+pub(crate) fn add_stat_avg(mut global: GlobalState, mut stat: Stat) {
+    let component = stat.component;
+    let name = stat.name;
+    if global.aggregated_stats.get(component).is_none() {
+        global.aggregated_stats.insert(component, HashMap::new());
+    }
+    if global
+        .aggregated_stats
+        .get(component)
+        .unwrap()
+        .get(name)
+        .is_none()
+    {
+        let mut new_named_stat = HashMap::new();
+        new_named_stat.insert(component, stat);
+        global.aggregated_stats.insert(name, new_named_stat);
+        stat.count = 0;
     }
 
-    pub(crate) async fn add_time(&mut self, global: &GlobalState) {
-        if self.timeout_clear.is_some() {
-            let now = Utc::now().timestamp();
-            let mut poll_time = 54500;
-            if global.read().unwrap().is_dev_env {
-                poll_time = 5000;
-                if self.last_send_time < now - poll_time {
-                    return;
-                }
-                self.clear_time(global).await;
-                self.set_new_timeout(global).await;
-            } else {
-                self.set_new_timeout(global).await;
-            }
-        }
+    let mut existing = *global
+        .aggregated_stats
+        .get(component)
+        .unwrap()
+        .get(name)
+        .unwrap();
+
+    existing.value += stat.value;
+    existing.count += 1;
+}
+
+pub(crate) fn add_stat_max(mut global: GlobalState, stat: Stat) {
+    let component = stat.component;
+    let name = stat.name;
+    if global.aggregated_stats.get(component).is_none() {
+        global.aggregated_stats.insert(component, HashMap::new());
+    }
+    if global
+        .aggregated_stats
+        .get(component)
+        .unwrap()
+        .get(name)
+        .is_none()
+    {
+        let mut new_named_stat = HashMap::new();
+        new_named_stat.insert(component, stat);
+        global.aggregated_stats.insert(name, new_named_stat);
     }
 
-    pub(crate) async fn clear_time(&mut self, global: &GlobalState) {
-        if self.timeout_clear.is_none() {
-            self.timeout_clear = None;
-            self.send_messages(global).await;
-        }
+    let mut existing = *global
+        .aggregated_stats
+        .get(component)
+        .unwrap()
+        .get(name)
+        .unwrap();
+
+    if stat.value > existing.value {
+        existing.value = stat.value;
+    }
+}
+
+pub(crate) fn add_log(mut global: GlobalState, log: Log) {
+    let sender = log.sender;
+    let receiver = log.receiver;
+
+    if !global.aggregated_logs.contains_key(sender) {
+        global.aggregated_logs.insert(sender, HashMap::new());
+    }
+    let txmap = global.aggregated_logs.get(sender).unwrap();
+    if txmap.get(receiver).is_none() {
+        let agg = log.to_aggregate_log();
+        let mut new_rxmap = HashMap::new();
+        new_rxmap.insert(receiver, agg);
+        global.aggregated_logs.insert(sender, new_rxmap);
     }
 
-    pub(crate) async fn set_new_timeout(&mut self, global: &GlobalState) {
-        self.timeout_clear = None;
-        std::thread::sleep(std::time::Duration::from_millis(5000));
-        self.send_messages(global).await;
+    let mut existing = *global
+        .aggregated_logs
+        .get(sender)
+        .unwrap()
+        .get(receiver)
+        .unwrap();
+    if log.is_error {
+        existing.errors += 1;
     }
 
-    pub(crate) async fn send_messages(&mut self, global: &GlobalState) {
-        let (log_list, stat_list) = match self.collect_messages(global).await {
-            Ok(data) => data,
-            Err(e) => {
-                eprintln!("log and stat collection error: {:?}", e.to_string());
-                (Vec::new(), Vec::new())
-            }
-        };
-        self.proxy_messages(log_list, stat_list, global).await;
-        self.last_send_time = Utc::now().timestamp()
+    existing.count += 1;
+    if existing.log.message == "" && !log.is_error {
+        existing.log.message = log.message;
+    }
+    if existing.error_message == "" && log.is_error {
+        existing.error_message = log.message;
     }
 
-    pub(crate) async fn collect_messages(
-        &self,
-        global: &GlobalState,
-    ) -> Result<(Vec<Log>, Vec<Stat>), Exception> {
-        if global.read().unwrap().is_dev_env {
-            println!("sending messages");
-        }
-        let mut logs = Vec::<Log>::new();
-        let mut stats = Vec::<Stat>::new();
-
-        // TODO: loop through and construct logs/stats
-        global
-            .read()
-            .unwrap()
-            .aggregated_logs
-            .keys()
-            .for_each(|sender| {
-                let rx = global
-                    .read()
-                    .unwrap()
-                    .aggregated_logs
-                    .get(sender)
-                    .unwrap()
-                    .keys()
-                    .for_each(|receiver| {
-                        // logs.push(
-                        //     Log {
-                        //         sender,
-                        //         receiver,
-                        //         count: global.read()
-                        //             .unwrap()
-                        //             .aggregated_logs
-                        //             .get(sender)
-                        //             .unwrap()
-                        //             .get(receiver)
-                        //             .unwrap().count,
-                        //         errors: global.read()
-                        //             .unwrap()
-                        //             .aggregated_logs
-                        //             .get(sender)
-                        //             .unwrap()
-                        //             .get(receiver)
-                        //             .unwrap().errors,
-                        //         message: global.read()
-                        //             .unwrap()
-                        //             .aggregated_logs
-                        //             .get(sender)
-                        //             .unwrap()
-                        //             .get(receiver)
-                        //             .unwrap().message,
-                        //         error_message: global.read()
-                        //             .unwrap()
-                        //             .aggregated_logs
-                        //             .get(sender)
-                        //             .unwrap()
-                        //             .get(receiver)
-                        //             .unwrap().error_message,
-                        //         graph: global.read()
-                        //             .unwrap()
-                        //             .aggregated_logs
-                        //             .get(sender)
-                        //             .unwrap()
-                        //             .get(receiver)
-                        //             .unwrap_or("noGraph").graph,
-                        //         account: global.read()
-                        //             .unwrap()
-                        //             .aggregated_logs
-                        //             .get(sender)
-                        //             .unwrap()
-                        //             .get(receiver)
-                        //             .unwrap().account,
-                        //         initial_message_count: global.read()
-                        //             .unwrap()
-                        //             .aggregated_logs
-                        //             .get(sender)
-                        //             .unwrap()
-                        //             .get(receiver)
-                        //             .unwrap().initial_message_count
-                        //     }
-                        // );
-                    });
-            });
-
-        global.write().unwrap().aggregated_logs = HashMap::new();
-        global.write().unwrap().aggregated_stats = HashMap::new();
-        Ok((logs, stats))
-    }
-
-    async fn proxy_messages(
-        &self,
-        time_logs: Vec<Log>,
-        time_stats: Vec<Stat>,
-        global: &GlobalState,
-    ) -> Result<(), Exception> {
-        if !time_logs.is_empty() || !time_stats.is_empty() {
-            let mut account_key = String::new();
-            if !time_logs.is_empty() {
-                account_key = time_logs[0].account.to_owned();
-            }
-            if !time_stats.is_empty() {
-                account_key = time_stats[0].account.to_owned();
-            }
-
-            let url = match global.read().unwrap().is_dev_env {
-                true => "http://localhost:4000/",
-                false => "https://llamalogs.com/",
-            };
-
-            if global.read().unwrap().is_dev_env {
-                println!("Log list: {:#?}", time_logs);
-            }
-
-            let res = surf::post(url)
-                .body_json(&Payload {
-                    account_key,
-                    time_logs,
-                    time_stats,
-                })?
-                .await?;
-        }
-
-        Ok(())
+    if global.is_dev_env {
+        println!("{:#?}", global.aggregated_logs);
     }
 }
