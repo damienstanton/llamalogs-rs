@@ -8,13 +8,36 @@ mod aggregator;
 mod proxy;
 mod types;
 
-fn process_log() {}
-fn process_stat() {}
+use aggregator::{add_log, add_stat, add_stat_avg, add_stat_max, start_timer};
+use proxy::{collect_and_send, collect_and_send_blocking};
+use surf::Exception;
+use types::{GlobalState, Log, LogArgs, Stat, StatArgs};
+
+fn process_log(global: GlobalState, mut log: Log) {
+    if log.account == "" {
+        log.account = global.account_key;
+    }
+    if log.graph == "" {
+        log.graph = global.graph_name;
+    }
+    if log.sender == "" || log.receiver == "" || log.account == "" || log.graph == "" {
+        return;
+    }
+    add_log(global, log);
+}
+
+fn process_stat(global: GlobalState, mut stat: Stat) {
+    if stat.account == "" {
+        stat.account = global.account_key;
+    }
+    if stat.graph == "" {
+        stat.graph == global.graph_name;
+    }
+    add_stat(global, stat);
+}
 
 // Public API
 // ----------
-pub use types::{GlobalState, LogArgs, StatArgs};
-
 pub struct InitArgs {
     graph_name: &'static str,
     account_key: &'static str,
@@ -22,6 +45,7 @@ pub struct InitArgs {
     is_disabled: bool,
 }
 
+/// Creates the global state object used throughout the crate.
 pub fn init(args: InitArgs) -> GlobalState {
     let mut g = GlobalState::default();
     g.account_key = args.account_key;
@@ -31,14 +55,50 @@ pub fn init(args: InitArgs) -> GlobalState {
     g
 }
 
-pub fn log(global: &GlobalState, args: LogArgs) {
+/// Creates a new log for processing
+pub fn log(global: GlobalState, args: LogArgs) {
     if global.is_disabled {
         return;
     }
     let log = args.to_log();
+    process_log(global, log);
 }
 
-pub fn point_stat(global: &GlobalState, args: StatArgs) {}
-pub fn average_stat(global: &GlobalState, args: StatArgs) {}
-pub fn max_stat(global: &GlobalState, args: StatArgs) {}
-pub fn force_send(global: &GlobalState) {}
+/// Creates a new point stat for processing
+pub fn point_stat(global: GlobalState, args: StatArgs) {
+    if global.is_disabled {
+        return;
+    }
+    let mut stat = args.to_stat();
+    stat.kind = "point";
+    process_stat(global, stat);
+}
+
+/// Creates a new average stat for processing
+pub fn average_stat(global: GlobalState, args: StatArgs) {
+    if global.is_disabled {
+        return;
+    }
+    let mut stat = args.to_stat();
+    stat.kind = "average";
+    process_stat(global, stat);
+}
+
+/// Creates a new max stat for processing
+pub fn max_stat(global: GlobalState, args: StatArgs) {
+    if global.is_disabled {
+        return;
+    }
+    let mut stat = args.to_stat();
+    stat.kind = "max";
+    process_stat(global, stat);
+}
+
+/// Calls a blocking send of the current collection of logs and stats
+pub fn force_send(global: GlobalState) -> Result<(), Exception> {
+    if global.is_disabled {
+        ()
+    }
+    collect_and_send_blocking(global);
+    Ok(())
+}

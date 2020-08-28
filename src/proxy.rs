@@ -1,8 +1,13 @@
-use crate::aggregator::*;
 use crate::types::*;
+use futures::executor::block_on;
 use surf::Exception;
 
-async fn collect_and_send(mut global: GlobalState) -> Result<(), Exception> {
+pub(crate) fn collect_and_send_blocking(global: GlobalState) -> Result<(), Exception> {
+    block_on(collect_and_send(global))?;
+    Ok(())
+}
+
+pub(crate) async fn collect_and_send(global: GlobalState) -> Result<(), Exception> {
     let log_list = global
         .aggregated_logs
         .iter()
