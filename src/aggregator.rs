@@ -113,10 +113,11 @@ pub(crate) fn add_log(global: &mut GlobalState, log: Log) {
     if !global.aggregated_logs.contains_key(sender) {
         global.aggregated_logs.insert(sender, HashMap::new());
     }
+
     let txmap = global.aggregated_logs.get(sender).unwrap();
     if txmap.get(receiver).is_none() {
+        let mut new_rxmap = txmap.clone();
         let agg = log.to_aggregate_log();
-        let mut new_rxmap = HashMap::new();
         new_rxmap.insert(receiver, agg);
         global.aggregated_logs.insert(sender, new_rxmap);
     }
@@ -130,7 +131,7 @@ pub(crate) fn add_log(global: &mut GlobalState, log: Log) {
     if log.is_error {
         existing.errors += 1;
     }
-
+    // TODO: This is not updating the actual object in the global store.
     existing.count += 1;
     if existing.message == "" && !log.is_error {
         existing.message = log.message;

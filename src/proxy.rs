@@ -54,16 +54,16 @@ pub(crate) async fn send(global: &GlobalState) -> Result<(), Exception> {
     println!("JSON request: {:#?}", new_req_json);
 
     let url = match global.is_dev_env {
-        true => "http://localhost:4000/",
+        true => "http://localhost:4000/api/v0/timedata",
         false => "https://llamalogs.com/api/v0/timedata",
     };
+
     let mut res = surf::post(url)
-        .set_header("Content-Type", "application/json")
-        .body_string(new_req_json)
-        .await?;
-    if !res.status().is_success() {
-        eprintln!("Bad status code: {:#?}", res.status());
-    }
-    println!("Response: {:#?}", res.body_json::<String>().await);
+        .body_json(&new_req).unwrap().await.unwrap();
+
+    println!("Status:\t{} \nInfo:\t{}\n", 
+        res.status(), 
+        res.body_string().await.unwrap());
+
     Ok(())
 }
