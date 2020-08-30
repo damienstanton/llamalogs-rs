@@ -79,7 +79,7 @@ impl Log {
         AggregateLog {
             // log: self,
             account_key: self.account,
-            graph_name: self.graph,
+            graph: self.graph,
             start_time: self.timestamp,
             initial_message_count: 0i64,
             error_message: "",
@@ -96,7 +96,7 @@ impl Log {
 pub struct AggregateLog {
     // pub log: Log,
     pub account_key: &'static str,
-    pub graph_name: &'static str,
+    pub graph: &'static str,
     pub start_time: i64,
     #[serde(rename(serialize = "initialMessageCount"))]
     pub initial_message_count: i64,
