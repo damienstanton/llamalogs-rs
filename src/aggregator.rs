@@ -1,40 +1,13 @@
 use crate::proxy::*;
 use crate::types::*;
-use std::{collections::HashMap, sync::mpsc::channel, thread};
+use std::{
+    collections::HashMap,
+    sync::{mpsc::channel, Arc},
+    thread,
+};
 
-pub(crate) fn start_timer(global: &mut GlobalState) {
-    if global.timer_started {
-        return;
-    }
-    global.timer_started = true;
-    let fs_global = global.clone();
-
-    thread::spawn(move || {
-        thread::sleep(std::time::Duration::from_secs(5));
-        let res = send_blocking(&fs_global);
-        match res {
-            Ok(_) => (),
-            Err(e) => {
-                eprintln!("Ticker log submission error: {:#?}", e.to_string());
-                ()
-            }
-        }
-    });
-
-    let (tx, rx) = channel();
-    thread::spawn(move || loop {
-        thread::sleep(std::time::Duration::from_millis(59_500));
-        let _ = tx.send(true);
-    });
-    while let Some(_) = rx.recv().iter().next() {
-        match send_blocking(&global) {
-            Ok(_) => (),
-            Err(e) => {
-                eprintln!("Timer submission error: {:#?}", e.to_string());
-                ()
-            }
-        };
-    }
+pub fn start_timer(global: &mut GlobalState) {
+    // TODO
 }
 
 pub(crate) fn add_stat(global: &mut GlobalState, stat: Stat) {
@@ -117,27 +90,36 @@ pub(crate) fn add_log(global: &mut GlobalState, log: Log) {
     let txmap = global.aggregated_logs.get(sender).unwrap();
     if txmap.get(receiver).is_none() {
         let mut new_rxmap = txmap.clone();
-        let agg = log.to_aggregate_log();
+        let mut agg = log.to_aggregate_log();
+        if log.is_error {
+            agg.errors += 1;
+        }
+        agg.count += 1;
+        if agg.message == "" && !log.is_error {
+            agg.message = log.message;
+        }
+        if agg.error_message == "" && log.is_error {
+            agg.error_message = log.message;
+        }
         new_rxmap.insert(receiver, agg);
         global.aggregated_logs.insert(sender, new_rxmap);
-    }
-
-    let mut existing = *global
-        .aggregated_logs
-        .get(sender)
-        .unwrap()
-        .get(receiver)
-        .unwrap();
-    if log.is_error {
-        existing.errors += 1;
-    }
-    // TODO: This is not updating the actual object in the global store.
-    existing.count += 1;
-    if existing.message == "" && !log.is_error {
-        existing.message = log.message;
-    }
-    if existing.error_message == "" && log.is_error {
-        existing.error_message = log.message;
+    } else {
+        let mut existing = *global
+            .aggregated_logs
+            .get(sender)
+            .unwrap()
+            .get(receiver)
+            .unwrap();
+        if log.is_error {
+            existing.errors += 1;
+        }
+        existing.count += 1;
+        if existing.message == "" && !log.is_error {
+            existing.message = log.message;
+        }
+        if existing.error_message == "" && log.is_error {
+            existing.error_message = log.message;
+        }
     }
 
     if global.is_dev_env {

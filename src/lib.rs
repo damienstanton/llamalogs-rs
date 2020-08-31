@@ -8,7 +8,7 @@ mod aggregator;
 mod proxy;
 mod types;
 
-use aggregator::{add_log, add_stat, start_timer};
+use aggregator::{add_log, add_stat};
 use proxy::send_blocking;
 use types::{GlobalState, LlamaError, Log, Stat, StatArgs};
 
@@ -37,6 +37,7 @@ fn process_stat(global: &mut GlobalState, mut stat: Stat) {
 
 // Public API
 // ----------
+pub use aggregator::start_timer;
 pub use proxy::collect_messages;
 pub use types::LogArgs;
 pub struct InitArgs {
@@ -53,10 +54,6 @@ pub fn init(args: InitArgs) -> GlobalState {
     g.graph_name = args.graph_name;
     g.is_dev_env = args.is_dev_env;
     g.is_disabled = args.is_disabled;
-
-    // if !args.is_disabled {
-    //     start_timer(&mut g);
-    // }
     g
 }
 
@@ -100,11 +97,11 @@ pub fn max_stat(global: &mut GlobalState, args: StatArgs) {
 }
 
 /// Calls a blocking send of the current collection of logs and stats
-pub fn force_send(global: GlobalState) -> Result<(), LlamaError> {
+pub fn force_send(mut global: &mut GlobalState) -> Result<(), LlamaError> {
     if global.is_disabled {
         ()
     }
-    match send_blocking(&global) {
+    match send_blocking(&mut global) {
         Ok(_) => Ok(()),
         Err(_) => Err(LlamaError::NetError()),
     }

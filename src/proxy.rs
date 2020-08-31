@@ -3,7 +3,7 @@ use futures::executor::block_on;
 use serde_json::to_string;
 use surf::Exception;
 
-pub(crate) fn send_blocking(global: &GlobalState) -> Result<(), LlamaError> {
+pub(crate) fn send_blocking(global: &mut GlobalState) -> Result<(), LlamaError> {
     match block_on(send(global)) {
         Ok(_) => Ok(()),
         Err(e) => {
@@ -13,7 +13,7 @@ pub(crate) fn send_blocking(global: &GlobalState) -> Result<(), LlamaError> {
     }
 }
 
-pub fn collect_messages(global: &GlobalState) -> (Vec<AggregateLog>, Vec<Stat>) {
+pub fn collect_messages(global: &mut GlobalState) -> (Vec<AggregateLog>, Vec<Stat>) {
     let mut log_list = Vec::new();
     let mut stat_list = Vec::new();
 
@@ -31,8 +31,8 @@ pub fn collect_messages(global: &GlobalState) -> (Vec<AggregateLog>, Vec<Stat>) 
     (log_list, stat_list)
 }
 
-pub(crate) async fn send(global: &GlobalState) -> Result<(), Exception> {
-    let (log_list, stat_list) = collect_messages(global);
+pub(crate) async fn send(mut global: &mut GlobalState) -> Result<(), Exception> {
+    let (log_list, stat_list) = collect_messages(&mut global);
     if global.is_dev_env {
         println!("Log list: {:#?}", global.aggregated_logs);
     }
@@ -58,12 +58,13 @@ pub(crate) async fn send(global: &GlobalState) -> Result<(), Exception> {
         false => "https://llamalogs.com/api/v0/timedata",
     };
 
-    let mut res = surf::post(url)
-        .body_json(&new_req).unwrap().await.unwrap();
+    let mut res = surf::post(url).body_json(&new_req).unwrap().await.unwrap();
 
-    println!("Status:\t{} \nInfo:\t{}\n", 
-        res.status(), 
-        res.body_string().await.unwrap());
+    println!(
+        "Status:\t{} \nInfo:\t{}\n",
+        res.status(),
+        res.body_string().await.unwrap()
+    );
 
     Ok(())
 }

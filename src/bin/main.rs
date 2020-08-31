@@ -7,11 +7,18 @@ fn main() {
         is_disabled: false,
     });
 
-    let mut args = LogArgs::default();
-    args.sender = "User";
-    args.receiver = "Web Server";
-    args.message = "Hello from Rust!";
+    let mut args1 = LogArgs::default();
+    args1.sender = "User A";
+    args1.receiver = "Web Server";
+    args1.message = "Hello from Rust!";
 
-    log(&mut global, args);
-    force_send(global);
+    let mut args2 = LogArgs::default();
+    args2.sender = "User B";
+    args2.receiver = "Web Server";
+    args2.message = "Hello from Rust client B!";
+
+    start_timer(&mut global);
+    log(&mut global, args1);
+    log(&mut global, args2);
+    force_send(&mut global);
 }
