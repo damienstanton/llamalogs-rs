@@ -1,6 +1,7 @@
 use crate::types::*;
 use futures::executor::block_on;
 use serde_json::to_string;
+use std::collections::HashMap;
 use surf::Exception;
 
 pub(crate) fn send_blocking(global: &mut GlobalState) -> Result<(), LlamaError> {
@@ -27,6 +28,9 @@ pub fn collect_messages(global: &mut GlobalState) -> (Vec<AggregateLog>, Vec<Sta
             stat_list.push(*v);
         }
     }
+
+    global.aggregated_logs = HashMap::new();
+    global.aggregated_stats = HashMap::new();
 
     (log_list, stat_list)
 }
