@@ -1,13 +1,23 @@
 use crate::proxy::*;
 use crate::types::*;
-use std::{
-    collections::HashMap,
-    sync::{mpsc::channel, Arc},
-    thread,
-};
+use std::{collections::HashMap, sync::mpsc::channel, thread, time::Duration};
 
 pub fn start_timer(global: &mut GlobalState) {
-    // TODO
+    let (tx, rx) = channel();
+    let tx1 = tx.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_secs(5));
+        tx1.send(true).unwrap();
+    });
+
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_millis(59_500));
+        tx.send(true).unwrap();
+    });
+
+    for _ in rx {
+        send_blocking(global);
+    }
 }
 
 pub(crate) fn add_stat(global: &mut GlobalState, stat: Stat) {
@@ -65,17 +75,17 @@ pub(crate) fn add_stat_max(global: &mut GlobalState, stat: Stat) {
         let mut new_named_stat = HashMap::new();
         new_named_stat.insert(component, stat);
         global.aggregated_stats.insert(name, new_named_stat);
-    }
+    } else {
+        let mut existing = *global
+            .aggregated_stats
+            .get(component)
+            .unwrap()
+            .get(name)
+            .unwrap();
 
-    let mut existing = *global
-        .aggregated_stats
-        .get(component)
-        .unwrap()
-        .get(name)
-        .unwrap();
-
-    if stat.value > existing.value {
-        existing.value = stat.value;
+        if stat.value > existing.value {
+            existing.value = stat.value;
+        }
     }
 }
 

@@ -10,7 +10,7 @@ mod types;
 
 use aggregator::{add_log, add_stat};
 use proxy::send_blocking;
-use types::{GlobalState, LlamaError, Log, Stat, StatArgs};
+use types::{LlamaError, Log, Stat, StatArgs};
 
 fn process_log(global: &mut GlobalState, mut log: Log) {
     if log.account == "" {
@@ -39,7 +39,7 @@ fn process_stat(global: &mut GlobalState, mut stat: Stat) {
 // ----------
 pub use aggregator::start_timer;
 pub use proxy::collect_messages;
-pub use types::LogArgs;
+pub use types::{GlobalState, LogArgs};
 pub struct InitArgs {
     pub graph_name: &'static str,
     pub account_key: &'static str,
