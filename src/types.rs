@@ -2,7 +2,6 @@ use chrono::Utc;
 use serde::Serialize;
 use std::collections::HashMap;
 use thiserror::Error;
-
 #[derive(Debug, Error)]
 pub enum LlamaError {
     #[error("Network failure when communicating with llamalogs server")]
@@ -121,20 +120,8 @@ pub struct Stat {
     pub(crate) count: i64,
 }
 
-pub type GlobalState = State;
 pub type LogData = HashMap<&'static str, HashMap<&'static str, AggregateLog>>;
 pub type StatData = HashMap<&'static str, HashMap<&'static str, Stat>>;
-
-#[derive(Debug, Clone, Default)]
-pub struct State {
-    pub is_dev_env: bool,
-    pub is_disabled: bool,
-    pub account_key: &'static str,
-    pub graph_name: &'static str,
-    pub aggregated_logs: LogData,
-    pub aggregated_stats: StatData,
-    pub timer_started: bool,
-}
 
 #[derive(Default, Debug, Serialize)]
 pub(crate) struct LogRequest {
