@@ -21,8 +21,6 @@ pub struct Logger {
 }
 
 impl Logger {
-    /// Start listen loop for the llamalogs server
-
     /// Create a new Llamalogs logger from an `LoggerArgs` structure
     pub fn from_args(args: LoggerArg) -> Self {
         let mut state = InnerLogger::default();
@@ -43,7 +41,6 @@ impl Logger {
             return;
         }
         self.state.add_log(args.to_log());
-        // self.tx.try_lock().unwrap().send(self.state).unwrap();
     }
 
     /// Create a new Llamalogs stat and add it to the queue
@@ -52,7 +49,6 @@ impl Logger {
             return;
         }
         self.state.add_stat(args.to_stat());
-        // self.tx.try_lock().unwrap().send(self.state).unwrap();
     }
 
     /// Force send the current queue of logs and stats

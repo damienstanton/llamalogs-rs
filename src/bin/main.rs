@@ -31,7 +31,6 @@ fn main() {
         graph_name,
     };
 
-    std::thread::sleep(std::time::Duration::from_secs(10));
     let log3 = LogArg {
         sender: "User C",
         receiver: "Web Server",
