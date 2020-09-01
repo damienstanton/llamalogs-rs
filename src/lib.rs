@@ -3,28 +3,80 @@
 //! Llama Logs is a brand new tool that turns distributed logs into a real time
 //! interactive graph. It was created to help bring clarity to complex cloud
 //! architectures
-
-mod logger;
+mod args;
 mod types;
 
-// Public API
-// ----------
-pub use logger::Logger;
-pub use types::{LogArgs, StatArgs};
+pub use args::{LogArg, LoggerArg, StatArg};
+use std::sync::{mpsc, Mutex};
+use types::{Logger as InnerLogger, Request};
 
-pub struct InitArgs {
-    pub graph_name: &'static str,
-    pub account_key: &'static str,
-    pub is_dev_env: bool,
-    pub is_disabled: bool,
+const POLL_SHORT: u64 = 5;
+const POLL_LONG: u64 = 5000; // TODO: 59_500
+
+/// The public logger instance
+#[derive(Debug)]
+pub struct Logger {
+    state: InnerLogger,
+    request: Request,
 }
 
-/// Creates the global state object used throughout the crate.
-pub fn init(args: InitArgs) -> Logger {
-    let mut g = Logger::default();
-    g.account_key = args.account_key;
-    g.graph_name = args.graph_name;
-    g.is_dev_env = args.is_dev_env;
-    g.is_disabled = args.is_disabled;
-    g
+impl Logger {
+    /// Start listen loop for the llamalogs server
+
+    /// Create a new Llamalogs logger from an `LoggerArgs` structure
+    pub fn from_args(args: LoggerArg) -> Self {
+        let mut state = InnerLogger::default();
+        state.account_key = args.account_key;
+        state.graph_name = args.graph_name;
+        state.is_disabled = args.is_disabled;
+        state.is_dev_env = args.is_dev_env;
+        let mut logger = Self {
+            state,
+            request: Request::default(),
+        };
+        logger
+    }
+
+    /// Create a new LLamalogs log and add it to the queue
+    pub fn log(&mut self, args: LogArg) {
+        if self.state.is_disabled {
+            return;
+        }
+        self.state.add_log(args.to_log());
+        // self.tx.try_lock().unwrap().send(self.state).unwrap();
+    }
+
+    /// Create a new Llamalogs stat and add it to the queue
+    pub fn stat(&mut self, args: StatArg) {
+        if self.state.is_disabled {
+            return;
+        }
+        self.state.add_stat(args.to_stat());
+        // self.tx.try_lock().unwrap().send(self.state).unwrap();
+    }
+
+    /// Force send the current queue of logs and stats
+    pub fn force_send(&mut self) -> Result<(), &'static str> {
+        if self.state.is_disabled {
+            ()
+        }
+        match self.state.send_blocking() {
+            Ok(_) => Ok(()),
+            Err(_) => Err("network error"),
+        }
+    }
+
+    /* TODO: Potentially add these in for direct parameterization? */
+    // /// Create a new Llamalogs stat and add it to the queue
+    // pub fn stat(&mut self, component: &'static str, name: &'static str, value: f64) {}
+
+    // /// Create a new LLamalogs log and add it to the queue
+    // pub fn log(
+    //     &mut self,
+    //     sender: &'static str,
+    //     receiver: &'static str,
+    //     message: &'static str,
+    //     is_error: bool,
+    // ) {
+    // }
 }
