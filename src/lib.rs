@@ -10,21 +10,30 @@ pub use args::{LogArg, LoggerArg, StatArg};
 use std::sync::{mpsc, Arc, Mutex};
 use types::{Logger as InnerLogger, Request};
 
-const POLL_SHORT: u64 = 5;
-const POLL_LONG: u64 = 5000; // TODO: 59_500
-
 /// The public logger instance
 #[derive(Debug)]
 pub struct Logger {
     state: InnerLogger,
     request: Request,
-    tx: Arc<Mutex<mpsc::Sender<Arc<InnerLogger>>>>,
-    rx: Arc<Mutex<mpsc::Receiver<Arc<InnerLogger>>>>,
+    tx: Arc<Mutex<mpsc::Sender<InnerLogger>>>,
+    rx: Arc<Mutex<mpsc::Receiver<InnerLogger>>>,
 }
 
 impl Logger {
-    fn start_timer(mut self) -> Self {
-        self
+    pub fn send_every(mut self, millis: u64) {
+        std::thread::spawn(move || loop {
+            println!("Polling for {} milliseconds...", millis);
+            std::thread::sleep(std::time::Duration::from_millis(millis));
+            if let Ok(guard) = self.rx.try_lock() {
+                if let Ok(updated_state) = guard.try_recv() {
+                    self.state = updated_state;
+                    self.force_send().unwrap();
+                    self.state.clear();
+                }
+            }
+        })
+        .join()
+        .unwrap();
     }
 
     /// Create a new Llamalogs logger from an `LoggerArgs` structure
@@ -41,7 +50,7 @@ impl Logger {
             tx: Arc::new(Mutex::new(tx)),
             rx: Arc::new(Mutex::new(rx)),
         };
-        logger.start_timer()
+        logger
     }
 
     /// Create a new LLamalogs log and add it to the queue
@@ -49,7 +58,11 @@ impl Logger {
         if self.state.is_disabled {
             return;
         }
-        self.state.add_log(args.to_log());
+        let mut new_state = self.state.clone();
+        new_state.add_log(args.to_log());
+        if let Ok(chan) = self.tx.try_lock() {
+            chan.send(new_state).unwrap();
+        }
     }
 
     /// Create a new Llamalogs stat and add it to the queue
@@ -57,11 +70,15 @@ impl Logger {
         if self.state.is_disabled {
             return;
         }
-        self.state.add_stat(args.to_stat());
+        let mut new_state = self.state.clone();
+        new_state.add_stat(args.to_stat());
+        if let Ok(chan) = self.tx.try_lock() {
+            chan.send(new_state).unwrap();
+        }
     }
 
     /// Force send the current queue of logs and stats
-    pub fn force_send(&mut self) -> Result<(), &'static str> {
+    pub fn force_send(&self) -> Result<(), &'static str> {
         if self.state.is_disabled {
             ()
         }

@@ -126,9 +126,17 @@ impl Logger {
         };
     }
 
+    /// Clear the existing log and stat entries
+    pub(crate) fn clear(mut self) {
+        self.aggregated_logs = HashMap::new();
+        self.aggregated_stats = HashMap::new();
+        assert_eq!(self.aggregated_logs.len(), 0);
+        assert_eq!(self.aggregated_stats.len(), 0);
+    }
+
     /// Extract vectors of all aggregated logs and statistics, and clear their
     /// entries in the global `Logger` structure.
-    pub(crate) fn collect_and_clear(&mut self) -> (Vec<Log>, Vec<Stat>) {
+    pub(crate) fn collect(&self) -> (Vec<Log>, Vec<Stat>) {
         let mut log_list = Vec::new();
         let mut stat_list = Vec::new();
 
@@ -142,9 +150,6 @@ impl Logger {
                 stat_list.push(*v);
             }
         }
-
-        self.aggregated_logs = HashMap::new();
-        self.aggregated_stats = HashMap::new();
 
         (log_list, stat_list)
     }
@@ -212,7 +217,7 @@ impl Logger {
     }
 
     /// A blocking send to the network
-    pub(crate) fn send_blocking(&mut self) -> Result<(), &'static str> {
+    pub(crate) fn send_blocking(&self) -> Result<(), &'static str> {
         match block_on(self.send()) {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -223,8 +228,8 @@ impl Logger {
     }
 
     /// An asynchronouse send to the network
-    pub(crate) async fn send(&mut self) -> Result<(), Exception> {
-        let (log_list, stat_list) = self.collect_and_clear();
+    pub(crate) async fn send(&self) -> Result<(), Exception> {
+        let (log_list, stat_list) = self.collect();
         if self.is_dev_env {
             println!("Log list: {:#?}", self.aggregated_logs);
         }

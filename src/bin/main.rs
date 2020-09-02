@@ -43,5 +43,5 @@ fn main() {
     logger.log(log1);
     logger.log(log2);
     logger.log(log3);
-    println!("{:#?}", logger.force_send().unwrap());
+    logger.send_every(5000);
 }
