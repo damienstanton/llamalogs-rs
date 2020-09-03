@@ -25,7 +25,7 @@ impl Logger {
             println!("Polling for {} milliseconds...", millis);
             std::thread::sleep(std::time::Duration::from_millis(millis));
             if let Ok(guard) = self.rx.try_lock() {
-                if let Ok(updated_state) = guard.try_recv() {
+                while let Ok(updated_state) = guard.try_recv() {
                     self.state = updated_state;
                     self.force_send().unwrap();
                     self.state.clear();
@@ -59,7 +59,17 @@ impl Logger {
             return;
         }
         let mut new_state = self.state.clone();
-        new_state.add_log(args.to_log());
+        let log_data = args.to_log();
+
+        if self.state.aggregated_logs.get(log_data.sender).is_some() {
+            let m = self.state.aggregated_logs.get(log_data.sender).unwrap();
+            if let Some(&log) = m.get(log_data.receiver) {
+                if log == log_data {
+                    return;
+                }
+            }
+        }
+        new_state.add_log(log_data);
         if let Ok(chan) = self.tx.try_lock() {
             chan.send(new_state).unwrap();
         }

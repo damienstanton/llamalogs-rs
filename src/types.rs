@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use surf::Exception;
 
-#[derive(Debug, Serialize, Clone, Copy, Deserialize)]
+#[derive(Debug, Serialize, Clone, Copy, Deserialize, Eq, PartialEq)]
 /// A log structure
 pub struct Log {
     pub account_key: &'static str,
@@ -52,10 +52,47 @@ pub struct Logger {
     pub is_disabled: bool,
     pub account_key: &'static str,
     pub graph_name: &'static str,
+    // (str, (str, Log))
     pub aggregated_logs: HashMap<&'static str, HashMap<&'static str, Log>>,
     pub aggregated_stats: HashMap<&'static str, HashMap<&'static str, Stat>>,
     pub timer_started: bool,
 }
+
+// impl PartialEq for Logger {
+//     fn eq(&self, other: &Self) -> bool {
+//         // logs
+//         let key_comp = self
+//             .aggregated_logs
+//             .keys()
+//             .map(|&k| k)
+//             .zip(other.aggregated_logs.keys().map(|&k| k))
+//             .collect::<Vec<(&str, &str)>>();
+//         for keys in key_comp {
+//             if keys.0 != keys.1 {
+//                 return false;
+//             }
+//         }
+//         // stats
+//         let sk_comp = self
+//             .aggregated_stats
+//             .keys()
+//             .map(|&k| k)
+//             .zip(other.aggregated_stats.keys().map(|&k| k))
+//             .collect::<Vec<(&str, &str)>>();
+//         for keys in sk_comp {
+//             if keys.0 != keys.1 {
+//                 return false;
+//             }
+//         }
+//         // fields
+//         self.account_key == other.account_key
+//             && self.graph_name == other.graph_name
+//             && self.timer_started == other.timer_started
+//             && self.is_dev_env == other.is_dev_env
+//             && self.is_disabled == other.is_disabled
+//             && self.timer_started == other.timer_started
+//     }
+// }
 
 impl Logger {
     /// Add a new log for processing
